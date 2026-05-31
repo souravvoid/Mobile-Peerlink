@@ -1,0 +1,19 @@
+# PeerLink Security Protocol
+
+## 1. Local Network Vault (Zero Trust)
+PeerLink assumes the Local Area Network (WiFi) is hostile and subject to packet sniffing.
+
+## 2. Key Exchange
+*   Algorithm: `secp256r1` (ECDH) via Android Conscrypt Service.
+*   Ephemeral keys are generated for **every single session**; they are not cached.
+*   Vulnerability handling: MITM. Both clients will display a visual fingerprint of the AES shared key derived from the ECDH handshake. Users must visually verify to confirm uncompromised connections.
+
+## 3. Storage
+*   Keys: Kept statically in process memory during transfer. Promptly dropped on completion.
+*   Disk Input/Output: Saved files are sanitized specifically for Directory Traversal vectors (`..`, `/`).
+*   Output Directory: Android Scoped Storage (`MediaStore`/`Downloads` directory) strictly enforced instead of demanding `MANAGE_EXTERNAL_STORAGE` permissions.
+
+## 4. Transfer Cipher
+*   **AES-256-GCM**.
+*   A 12-byte random base IV is generated via `SecureRandom`. Every subsequent 4MB payload chunk increments this IV sequentially. 
+*   Metadata is transmitted heavily chunked with embedded encrypted length headers preventing Out-of-Memory (OOM) stream bomb attacks.

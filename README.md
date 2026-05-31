@@ -1,11 +1,14 @@
-<div align="center">
+# PeerLink Android Edition
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+PeerLink Android is a secure, decentralized local network (P2P) file sharing application. It enables high-speed, direct device-to-device transfers without cloud intermediates.
 
-  <h1>Built with AI Studio</h2>
+## Features
+- **Zero-Trust Encryption:** Automatic ephemeral ECDH key exchanges using secp256r1.
+- **Wire-Speed AES-256-GCM:** Protects streaming file transfers.
+- **Background Transfers:** Resilient socket streams handled by Android Foreground Services and WifiLocks.
+- **Aurora Borealis UI:** Jetpack Compose Material 3 implementation featuring glassmorphism and animated components.
+- **mDNS Auto-Discovery:** Find nearby devices without entering manual IP addresses.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
-
-  <a href="https://aistudio.google.com/apps">Start building</a>
-
-</div>
+## Architecture
+Built with Clean Architecture, MVVM, and Dependency Injection via Hilt.
+See `ARCHITECTURE.md` for full breakdown.

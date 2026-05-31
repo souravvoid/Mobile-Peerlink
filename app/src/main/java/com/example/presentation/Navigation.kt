@@ -1,0 +1,293 @@
+package com.example.presentation
+
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.example.ui.theme.*
+
+@Composable
+fun MainApp(viewModel: PeerLinkViewModel) {
+    val navController = rememberNavController()
+    
+    val fingerprint by viewModel.fingerprintToApprove.collectAsState()
+    if (fingerprint != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.answerApproval(false) },
+            containerColor = CoreDarkVariant,
+            title = { Text("Approve Connection", color = TextPrimary) },
+            text = {
+                Column {
+                    Text("Verify peer fingerprint:", color = TextSecondary)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = fingerprint!!,
+                        color = AuroraTeal,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 24.sp,
+                        letterSpacing = 2.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().background(DarkGlass).padding(16.dp).clip(RoundedCornerShape(8.dp))
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.answerApproval(true) },
+                    colors = ButtonDefaults.buttonColors(containerColor = AuroraTeal, contentColor = CoreDeepSpace)
+                ) {
+                    Text("Approve")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { viewModel.answerApproval(false) }) {
+                    Text("Reject", color = Pink80)
+                }
+            }
+        )
+    }
+
+    Scaffold(
+        containerColor = CoreDeepSpace,
+        contentColor = TextPrimary
+    ) { padding ->
+        NavHost(navController = navController, startDestination = "home", modifier = Modifier.padding(padding)) {
+            composable("home") { HomeScreen(navController, viewModel) }
+            composable("send") { SendScreen(navController, viewModel) }
+            composable("receive") { ReceiveScreen(navController, viewModel) }
+        }
+    }
+}
+
+@Composable
+fun HomeScreen(navController: NavController, viewModel: PeerLinkViewModel) {
+    val ip by viewModel.ipAddress.collectAsState()
+    
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("PeerLink", fontSize = 42.sp, fontWeight = FontWeight.ExtraBold, color = AuroraTeal)
+        Text("Secure Local Transfers", fontSize = 16.sp, color = TextSecondary)
+        
+        Spacer(modifier = Modifier.height(48.dp))
+        
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = CoreDarkVariant),
+            shape = RoundedCornerShape(24.dp)
+        ) {
+            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Your Local IP", color = TextSecondary, fontSize = 14.sp)
+                Text(ip, color = AuroraViolet, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(48.dp))
+        
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Button(
+                onClick = { navController.navigate("send") },
+                modifier = Modifier.weight(1f).height(64.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AuroraTeal)
+            ) {
+                Icon(Icons.Default.ArrowUpward, contentDescription = "Send", tint = CoreDeepSpace)
+                Spacer(Modifier.width(8.dp))
+                Text("Send", color = CoreDeepSpace, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+            
+            Button(
+                onClick = { navController.navigate("receive") },
+                modifier = Modifier.weight(1f).height(64.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AuroraViolet)
+            ) {
+                Icon(Icons.Default.ArrowDownward, contentDescription = "Receive", tint = CoreDeepSpace)
+                Spacer(Modifier.width(8.dp))
+                Text("Receive", color = CoreDeepSpace, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+fun SendScreen(navController: NavController, viewModel: PeerLinkViewModel) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val inviteCode by viewModel.inviteCode.collectAsState()
+    val stats by viewModel.stats.collectAsState()
+    
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.startSending(uri)
+        }
+    }
+    
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        IconButton(onClick = { 
+            viewModel.cancelTransfer()
+            navController.popBackStack() 
+        }) {
+            Icon(Icons.Default.Close, contentDescription = "Close", tint = TextPrimary)
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Send File", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = AuroraTeal)
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        if (inviteCode == null && stats.progress == 0f && stats.error == null && !stats.isComplete && !stats.isConnecting && !stats.isWaitingForApproval) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(GlassLayer)
+                    .border(2.dp, AuroraTeal, RoundedCornerShape(24.dp))
+                    .clickable { launcher.launch("*/*") },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.ArrowUpward, contentDescription = null, tint = AuroraTeal, modifier = Modifier.size(48.dp))
+                    Spacer(Modifier.height(16.dp))
+                    Text("Tap to select file", color = TextPrimary)
+                }
+            }
+        } else if (inviteCode != null && !stats.isComplete && stats.error == null && stats.progress == 0f && !stats.isWaitingForApproval) {
+            Text("Share this invite code with the receiver:", color = TextSecondary)
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().background(CoreDarkVariant, RoundedCornerShape(12.dp)).padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(inviteCode!!, color = AuroraCyan, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, maxLines = 1)
+                IconButton(onClick = { clipboard.setText(AnnotatedString(inviteCode!!)) }) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = AuroraViolet)
+                }
+            }
+            Spacer(modifier = Modifier.height(32.dp))
+            CircularProgressIndicator(color = AuroraTeal, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Waiting for receiver to connect...", color = TextSecondary, modifier = Modifier.align(Alignment.CenterHorizontally))
+        } else {
+            TransferProgressView(stats)
+        }
+    }
+}
+
+@Composable
+fun ReceiveScreen(navController: NavController, viewModel: PeerLinkViewModel) {
+    var inputCode by remember { mutableStateOf("") }
+    val stats by viewModel.stats.collectAsState()
+    
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        IconButton(onClick = { 
+            viewModel.cancelTransfer()
+            navController.popBackStack() 
+        }) {
+            Icon(Icons.Default.Close, contentDescription = "Close", tint = TextPrimary)
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Receive File", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = AuroraViolet)
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        if (stats.progress == 0f && stats.error == null && !stats.isComplete && !stats.isConnecting && !stats.isWaitingForApproval) {
+            OutlinedTextField(
+                value = inputCode,
+                onValueChange = { inputCode = it },
+                label = { Text("Invite Code", color = TextSecondary) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = AuroraViolet,
+                    unfocusedBorderColor = CoreDarkVariant,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(
+                onClick = { viewModel.startReceiving(inputCode) },
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                enabled = inputCode.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = AuroraViolet)
+            ) {
+                Text("Connect", color = CoreDeepSpace, fontWeight = FontWeight.Bold)
+            }
+        } else {
+            TransferProgressView(stats)
+        }
+    }
+}
+
+@Composable
+fun TransferProgressView(stats: com.example.domain.TransferStats) {
+    Column(
+        modifier = Modifier.fillMaxWidth().background(CoreDarkVariant, RoundedCornerShape(24.dp)).padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (stats.error != null) {
+            Icon(Icons.Default.Close, contentDescription = "Error", tint = Pink80, modifier = Modifier.size(64.dp))
+            Spacer(Modifier.height(16.dp))
+            Text("Transfer Failed", color = Pink80, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stats.error, color = TextSecondary, textAlign = TextAlign.Center)
+        } else if (stats.isComplete) {
+            Icon(Icons.Default.Check, contentDescription = "Done", tint = AuroraTeal, modifier = Modifier.size(64.dp))
+            Spacer(Modifier.height(16.dp))
+            Text("Transfer Complete", color = AuroraTeal, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            if (stats.currentFileName != null) {
+                Spacer(Modifier.height(8.dp))
+                Text("Saved to Downloads/PeerLink/${stats.currentFileName}", color = TextSecondary, fontSize = 12.sp, textAlign = TextAlign.Center)
+            }
+        } else if (stats.isWaitingForApproval) {
+            CircularProgressIndicator(color = AuroraViolet, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Approving Handshake...", color = TextSecondary, modifier = Modifier.align(Alignment.CenterHorizontally))
+        } else {
+            Text(stats.currentFileName ?: "Connecting...", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(24.dp))
+            LinearProgressIndicator(
+                progress = { stats.progress },
+                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                color = AuroraCyan,
+                trackColor = CoreDeepSpace,
+                drawStopIndicator = {}
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("${(stats.progress * 100).toInt()}%", color = AuroraTeal)
+                Text("%.1f MB/s".format(stats.speedMBps), color = AuroraViolet)
+            }
+        }
+    }
+}

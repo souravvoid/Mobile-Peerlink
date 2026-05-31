@@ -1,0 +1,6 @@
+{
+  "name": "PeerLink",
+  "description": "Secure P2P File Transfer Application utilizing ECDH and AES-GCM.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
