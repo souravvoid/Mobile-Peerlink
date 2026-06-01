@@ -4,21 +4,22 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.activity.viewModels
 import com.example.presentation.MainApp
 import com.example.presentation.PeerLinkViewModel
 import com.example.ui.theme.MyApplicationTheme
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+  private val viewModel: PeerLinkViewModel by viewModels()
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     setContent {
       MyApplicationTheme {
-        val appContainer = (application as PeerLinkApplication).appContainer
-        val viewModel: PeerLinkViewModel = viewModel(
-          factory = PeerLinkViewModel.provideFactory(appContainer)
-        )
         MainApp(viewModel)
       }
     }

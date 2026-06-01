@@ -2,14 +2,16 @@ package com.example.presentation
 
 import android.net.Uri
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import com.example.domain.TransferManager
 import com.example.network.NetworkUtils
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CompletableDeferred
+import javax.inject.Inject
 
-class PeerLinkViewModel(
+@HiltViewModel
+class PeerLinkViewModel @Inject constructor(
     private val transferManager: TransferManager
 ) : ViewModel() {
 
@@ -69,15 +71,5 @@ class PeerLinkViewModel(
         _fingerprintToApprove.value = null
         approvalDeferred?.complete(false)
         approvalDeferred = null
-    }
-
-    companion object {
-        fun provideFactory(appContainer: com.example.AppContainer): ViewModelProvider.Factory =
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return PeerLinkViewModel(appContainer.transferManager) as T
-                }
-            }
     }
 }
