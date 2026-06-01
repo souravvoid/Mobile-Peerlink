@@ -10,12 +10,57 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CompletableDeferred
 import javax.inject.Inject
 
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import android.content.Context
+import com.example.transfer.FileSender
+import com.example.transfer.FileReceiver
+
 @HiltViewModel
 class PeerLinkViewModel @Inject constructor(
     private val transferManager: TransferManager
 ) : ViewModel() {
 
+    init {
+        transferManager.chatManager.onFileOfferReceived = { fileName, size, port ->
+            val chatIp = transferManager.chatManager.peerIp
+            if (chatIp.isNotEmpty()) {
+                transferManager.startReceiving(chatIp, port, onApproval = { true })
+            }
+        }
+    }
+
+    fun sendFileViaChat(context: Context, uri: Uri) {
+        val sender = FileSender(context)
+        viewModelScope.launch(Dispatchers.IO) {
+            val port = sender.startListening()
+            
+            var fileName = "unknown"
+            var fileSize = 1L
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val nameIdx = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    val sizeIdx = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (nameIdx != -1) fileName = it.getString(nameIdx)
+                    if (sizeIdx != -1) fileSize = it.getLong(sizeIdx)
+                }
+            }
+            
+            transferManager.chatManager.sendFileOffer(fileName, fileSize, port)
+            transferManager.monitorSender(sender)
+            sender.acceptAndSend(uri, onApprovalRequested = { true })
+        }
+    }
+
     val stats = transferManager.stats
+    val chatMessages = transferManager.chatManager.messages
+    val isChatConnected = transferManager.chatManager.isConnected
+
+    fun sendChatMessage(text: String) {
+        transferManager.chatManager.sendTextMessage(text)
+    }
 
     private val _ipAddress = MutableStateFlow(NetworkUtils.getLocalIpv4Address() ?: "Unknown")
     val ipAddress = _ipAddress.asStateFlow()
@@ -35,10 +80,10 @@ class PeerLinkViewModel @Inject constructor(
             val deferred = CompletableDeferred<Boolean>()
             approvalDeferred = deferred
             deferred.await()
-        }, onPortReady = { port ->
+        }, onPortReady = { filePort, chatPort ->
             val ip = _ipAddress.value
             if (ip != "Unknown") {
-                _inviteCode.value = com.example.util.InviteCode.encode(ip, port)
+                _inviteCode.value = com.example.util.InviteCode.encode(ip, filePort, chatPort)
             }
         })
     }
@@ -47,6 +92,9 @@ class PeerLinkViewModel @Inject constructor(
         val details = com.example.util.InviteCode.decode(code)
         if (details != null) {
             transferManager.reset()
+            if (details.third != -1) {
+                transferManager.chatManager.connectAsClient(details.first, details.third)
+            }
             transferManager.startReceiving(details.first, details.second, onApproval = { fingerprint ->
                 _fingerprintToApprove.value = fingerprint
                 val deferred = CompletableDeferred<Boolean>()

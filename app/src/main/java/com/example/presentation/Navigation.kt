@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ContentCopy
@@ -200,6 +201,11 @@ fun SendScreen(navController: NavController, viewModel: PeerLinkViewModel) {
             Text("Waiting for receiver to connect...", color = TextSecondary, modifier = Modifier.align(Alignment.CenterHorizontally))
         } else {
             TransferProgressView(stats)
+            val isChatConnected by viewModel.isChatConnected.collectAsState()
+            if (isChatConnected) {
+                Spacer(modifier = Modifier.height(16.dp))
+                ChatView(viewModel)
+            }
         }
     }
 }
@@ -246,6 +252,87 @@ fun ReceiveScreen(navController: NavController, viewModel: PeerLinkViewModel) {
             }
         } else {
             TransferProgressView(stats)
+            val isChatConnected by viewModel.isChatConnected.collectAsState()
+            if (isChatConnected) {
+                Spacer(modifier = Modifier.height(16.dp))
+                ChatView(viewModel)
+            }
+        }
+    }
+}
+
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.Send
+
+@Composable
+fun ChatView(viewModel: PeerLinkViewModel) {
+    val context = LocalContext.current
+    val messages by viewModel.chatMessages.collectAsState()
+    var textMessage by remember { mutableStateOf("") }
+    
+    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+        Text("Real-Time Chat", color = AuroraTeal, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth().background(CoreDarkVariant, RoundedCornerShape(12.dp)).padding(8.dp),
+            reverseLayout = true
+        ) {
+            items(messages.reversed()) { msg ->
+                val align = if (msg.isMe) Alignment.End else Alignment.Start
+                val color = if (msg.isMe) AuroraTeal else AuroraViolet
+                val textColor = if (msg.isMe) CoreDeepSpace else TextPrimary
+                
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = align) {
+                    Box(modifier = Modifier.background(color, RoundedCornerShape(8.dp)).padding(12.dp)) {
+                        Text(
+                            text = if (msg.isFileCommand) "Sent File: ${msg.fileName}" else msg.text,
+                            color = textColor
+                        )
+                    }
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+                if (uri != null) {
+                    viewModel.sendFileViaChat(context, uri)
+                }
+            }
+            IconButton(
+                onClick = { launcher.launch("*/*") },
+                modifier = Modifier.background(CoreDarkVariant, RoundedCornerShape(50)).size(48.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Attach File", tint = AuroraViolet)
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            OutlinedTextField(
+                value = textMessage,
+                onValueChange = { textMessage = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Message...") },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = AuroraCyan,
+                    unfocusedBorderColor = CoreDarkVariant,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary
+                )
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            IconButton(
+                onClick = { 
+                    if (textMessage.isNotBlank()) {
+                        viewModel.sendChatMessage(textMessage)
+                        textMessage = ""
+                    }
+                },
+                modifier = Modifier.background(AuroraTeal, RoundedCornerShape(50)).size(48.dp)
+            ) {
+                Icon(Icons.Default.Send, contentDescription = "Send", tint = CoreDeepSpace)
+            }
         }
     }
 }

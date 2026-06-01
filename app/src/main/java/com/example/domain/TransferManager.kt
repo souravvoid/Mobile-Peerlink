@@ -16,8 +16,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+import com.example.chat.ChatManager
+
 class TransferManager(private val context: Context) {
     private var transferService: TransferService? = null
+    val chatManager = ChatManager()
     
     private val _stats = MutableStateFlow(TransferStats())
     val stats: StateFlow<TransferStats> = _stats.asStateFlow()
@@ -38,7 +41,7 @@ class TransferManager(private val context: Context) {
         }
     }
 
-    fun startSending(uri: Uri, onApproval: suspend (String) -> Boolean, onPortReady: (Int) -> Unit) {
+    fun startSending(uri: Uri, onApproval: suspend (String) -> Boolean, onPortReady: (Int, Int) -> Unit) {
         Intent(context, TransferService::class.java).also { intent ->
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -60,7 +63,9 @@ class TransferManager(private val context: Context) {
         
         CoroutineScope(Dispatchers.IO).launch {
             val port = sender.startListening()
-            onPortReady(port)
+            chatManager.startHost { chatPort ->
+                 onPortReady(port, chatPort)
+            }
             sender.acceptAndSend(uri, onApproval)
         }
     }
@@ -87,6 +92,17 @@ class TransferManager(private val context: Context) {
 
         CoroutineScope(Dispatchers.IO).launch {
             receiver.connectAndReceive(ip, port, onApproval)
+        }
+    }
+
+    fun monitorSender(sender: FileSender) {
+        transferService?.fileSender = sender
+        CoroutineScope(Dispatchers.IO).launch {
+            sender.stats.collect { 
+                _stats.value = it
+                transferService?.updateProgress(it.progress, it.speedMBps)
+                if (it.isComplete) transferService?.stopTransfer()
+            }
         }
     }
 

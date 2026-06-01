@@ -102,6 +102,8 @@ dependencies {
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
   implementation(libs.hilt.android)
+  implementation(libs.java.websocket)
+  implementation(libs.json)
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)

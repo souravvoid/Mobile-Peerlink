@@ -40,7 +40,12 @@ firebaseBom = "34.12.0"
 secretsGradlePlugin = "2.0.1"
 hilt = "2.55"
 
+javaWebsocket = "1.5.3"
+json = "20240303"
+
 [libraries]
+java-websocket = { group = "org.java-websocket", name = "Java-WebSocket", version.ref = "javaWebsocket" }
+json = { group = "org.json", name = "json", version.ref = "json" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
