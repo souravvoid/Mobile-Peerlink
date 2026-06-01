@@ -8,6 +8,9 @@ import androidx.activity.viewModels
 import com.example.presentation.MainApp
 import com.example.presentation.PeerLinkViewModel
 import com.example.ui.theme.MyApplicationTheme
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import com.example.domain.TransferManager
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint

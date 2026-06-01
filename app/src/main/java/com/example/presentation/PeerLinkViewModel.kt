@@ -9,6 +9,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CompletableDeferred
 import javax.inject.Inject
+import com.example.domain.usecase.GetTransferStatsUseCase
+import com.example.domain.usecase.StartSendingUseCase
+import com.example.domain.usecase.StartReceivingUseCase
+import com.example.domain.usecase.ResetTransferUseCase
 
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
@@ -19,14 +23,18 @@ import com.example.transfer.FileReceiver
 
 @HiltViewModel
 class PeerLinkViewModel @Inject constructor(
-    private val transferManager: TransferManager
+    private val transferManager: TransferManager, // Keep for chat features
+    private val startSendingUseCase: StartSendingUseCase,
+    private val startReceivingUseCase: StartReceivingUseCase,
+    private val getTransferStatsUseCase: GetTransferStatsUseCase,
+    private val resetTransferUseCase: ResetTransferUseCase
 ) : ViewModel() {
 
     init {
         transferManager.chatManager.onFileOfferReceived = { fileName, size, port ->
             val chatIp = transferManager.chatManager.peerIp
             if (chatIp.isNotEmpty()) {
-                transferManager.startReceiving(chatIp, port, onApproval = { true })
+                startReceivingUseCase(chatIp, port, onApproval = { true })
             }
         }
     }
@@ -54,7 +62,7 @@ class PeerLinkViewModel @Inject constructor(
         }
     }
 
-    val stats = transferManager.stats
+    val stats = getTransferStatsUseCase()
     val chatMessages = transferManager.chatManager.messages
     val isChatConnected = transferManager.chatManager.isConnected
 
@@ -74,13 +82,13 @@ class PeerLinkViewModel @Inject constructor(
     val fingerprintToApprove = _fingerprintToApprove.asStateFlow()
 
     fun startSending(uri: Uri) {
-        transferManager.reset()
-        transferManager.startSending(uri, onApproval = { fingerprint ->
+        resetTransferUseCase()
+        startSendingUseCase(uri, onApproval = { fingerprint ->
             _fingerprintToApprove.value = fingerprint
             val deferred = CompletableDeferred<Boolean>()
             approvalDeferred = deferred
             deferred.await()
-        }, onPortReady = { filePort, chatPort ->
+        }, configurePort = { filePort, chatPort ->
             val ip = _ipAddress.value
             if (ip != "Unknown") {
                 _inviteCode.value = com.example.util.InviteCode.encode(ip, filePort, chatPort)
@@ -91,11 +99,11 @@ class PeerLinkViewModel @Inject constructor(
     fun startReceiving(code: String) {
         val details = com.example.util.InviteCode.decode(code)
         if (details != null) {
-            transferManager.reset()
+            resetTransferUseCase()
             if (details.third != -1) {
                 transferManager.chatManager.connectAsClient(details.first, details.third)
             }
-            transferManager.startReceiving(details.first, details.second, onApproval = { fingerprint ->
+            startReceivingUseCase(details.first, details.second, onApproval = { fingerprint ->
                 _fingerprintToApprove.value = fingerprint
                 val deferred = CompletableDeferred<Boolean>()
                 approvalDeferred = deferred
@@ -109,12 +117,12 @@ class PeerLinkViewModel @Inject constructor(
         approvalDeferred?.complete(approved)
         approvalDeferred = null
         if (!approved) {
-           transferManager.reset()
+           resetTransferUseCase()
         }
     }
 
     fun cancelTransfer() {
-        transferManager.reset()
+        resetTransferUseCase()
         _inviteCode.value = null
         _fingerprintToApprove.value = null
         approvalDeferred?.complete(false)

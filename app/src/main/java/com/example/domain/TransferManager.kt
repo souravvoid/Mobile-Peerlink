@@ -26,11 +26,12 @@ class TransferManager(private val context: Context) {
     val stats: StateFlow<TransferStats> = _stats.asStateFlow()
 
     private val connection = object : ServiceConnection {
-        override fun onServiceConnected(className: ComponentName, service: IBinder) {
+        override fun onServiceConnected(className: ComponentName?, service: IBinder?) {
+            if (service == null) return
             val binder = service as TransferService.LocalBinder
             transferService = binder.getService()
         }
-        override fun onServiceDisconnected(arg0: ComponentName) {
+        override fun onServiceDisconnected(arg0: ComponentName?) {
             transferService = null
         }
     }
