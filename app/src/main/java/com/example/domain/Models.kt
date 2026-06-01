@@ -9,7 +9,7 @@ data class TransferStats(
     val speedMBps: Float = 0f,
     val isComplete: Boolean = false,
     val error: String? = null,
-    val isConnecting: Boolean = true,
+    val isConnecting: Boolean = false,
     val isWaitingForApproval: Boolean = false,
     val currentFileName: String? = null,
     val remoteFingerprint: String? = null,
