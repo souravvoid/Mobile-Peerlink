@@ -19,7 +19,7 @@ data class DiscoveredPeer(
 )
 
 class NsdHelper(private val context: Context) {
-    private val nsdManager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
+    private val nsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager
     private val wifiCharString = "PeerLinkMulticast"
     private val tag = "NsdHelper"
 
@@ -32,23 +32,26 @@ class NsdHelper(private val context: Context) {
     private var isDiscovering = false
     private var isRegistered = false
 
-    private val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-    private val multicastLock = wifiManager.createMulticastLock(wifiCharString).apply {
+    private val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+    private val multicastLock = wifiManager?.createMulticastLock(wifiCharString)?.apply {
         setReferenceCounted(true)
     }
 
     @Synchronized
     fun registerService(filePort: Int, chatPort: Int) {
+        val manager = nsdManager ?: return
         if (isRegistered) {
             unregisterService()
         }
 
+        val sharedPrefs = context.getSharedPreferences("peerlink_prefs", Context.MODE_PRIVATE)
+        val customName = sharedPrefs.getString("device_name", android.os.Build.MODEL) ?: android.os.Build.MODEL
         val serviceInfo = NsdServiceInfo().apply {
-            serviceName = "PeerLink - ${android.os.Build.MODEL} - $filePort"
+            serviceName = "PeerLink - $customName - $filePort"
             serviceType = "_peerlink._tcp"
             port = filePort
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                setAttribute("deviceName", android.os.Build.MODEL)
+                setAttribute("deviceName", customName)
                 setAttribute("chatPort", chatPort.toString())
             }
         }
@@ -75,7 +78,7 @@ class NsdHelper(private val context: Context) {
         }
 
         try {
-            nsdManager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
+            manager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
         } catch (e: Exception) {
             Log.e(tag, "Error registering NSD service", e)
         }
@@ -83,9 +86,10 @@ class NsdHelper(private val context: Context) {
 
     @Synchronized
     fun unregisterService() {
+        val manager = nsdManager ?: return
         if (!isRegistered || registrationListener == null) return
         try {
-            nsdManager.unregisterService(registrationListener)
+            manager.unregisterService(registrationListener)
         } catch (e: Exception) {
             Log.e(tag, "Error unregistering NSD service", e)
         } finally {
@@ -96,11 +100,12 @@ class NsdHelper(private val context: Context) {
 
     @Synchronized
     fun startDiscovery() {
+        val manager = nsdManager ?: return
         if (isDiscovering) return
         _discoveredPeers.value = emptyList()
 
         try {
-            multicastLock.acquire()
+            multicastLock?.acquire()
         } catch (e: Exception) {
             Log.e(tag, "Failed to acquire multicast lock", e)
         }
@@ -109,7 +114,7 @@ class NsdHelper(private val context: Context) {
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
                 Log.e(tag, "Start discovery failed: $errorCode")
                 try {
-                    nsdManager.stopServiceDiscovery(this)
+                    nsdManager?.stopServiceDiscovery(this)
                 } catch (e: Exception) {
                     // Safe ignore
                 }
@@ -134,48 +139,53 @@ class NsdHelper(private val context: Context) {
             override fun onServiceFound(serviceInfo: NsdServiceInfo) {
                 Log.d(tag, "Service found: ${serviceInfo.serviceName}")
                 if (serviceInfo.serviceType.contains("peerlink")) {
-                    nsdManager.resolveService(serviceInfo, object : NsdManager.ResolveListener {
-                        override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                            Log.e(tag, "Resolve failed: $errorCode")
-                        }
-
-                        override fun onServiceResolved(resolvedInfo: NsdServiceInfo) {
-                            Log.v(tag, "Service resolved: ${resolvedInfo.serviceName}")
-                            val ip = resolvedInfo.host.hostAddress ?: return
-
-                            // Filter out connection to own device IP if possible
-                            val myIp = NetworkUtils.getLocalIpv4Address()
-                            if (ip == myIp) return
-
-                            val devName = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                resolvedInfo.attributes["deviceName"]?.let { String(it, Charsets.UTF_8) }
-                            } else {
-                                null
-                            } ?: resolvedInfo.serviceName.removePrefix("PeerLink - ")
-
-                            val chatPort = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                resolvedInfo.attributes["chatPort"]?.let { String(it, Charsets.UTF_8).toIntOrNull() } ?: -1
-                            } else {
-                                -1
+                    try {
+                        nsdManager?.resolveService(serviceInfo, object : NsdManager.ResolveListener {
+                            override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                                Log.e(tag, "Resolve failed: $errorCode")
                             }
 
-                            val peer = DiscoveredPeer(
-                                serviceName = resolvedInfo.serviceName,
-                                deviceName = devName,
-                                ip = ip,
-                                filePort = resolvedInfo.port,
-                                chatPort = chatPort
-                            )
+                            override fun onServiceResolved(resolvedInfo: NsdServiceInfo) {
+                                Log.v(tag, "Service resolved: ${resolvedInfo.serviceName}")
+                                val hostVal = resolvedInfo.host ?: return
+                                val ip = hostVal.hostAddress ?: return
 
-                            synchronized(this@NsdHelper) {
-                                val currentList = _discoveredPeers.value
-                                if (currentList.none { it.ip == peer.ip && it.filePort == peer.filePort }) {
-                                    _discoveredPeers.value = currentList + peer
-                                    Log.i(tag, "Peer added: ${peer.deviceName} @ ${peer.ip}:${peer.filePort}")
+                                // Filter out connection to own device IP if possible
+                                val myIp = NetworkUtils.getLocalIpv4Address()
+                                if (ip == myIp) return
+
+                                val devName = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                                    resolvedInfo.attributes?.get("deviceName")?.let { String(it, Charsets.UTF_8) }
+                                } else {
+                                    null
+                                } ?: resolvedInfo.serviceName.removePrefix("PeerLink - ")
+
+                                val chatPort = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                                    resolvedInfo.attributes?.get("chatPort")?.let { String(it, Charsets.UTF_8).toIntOrNull() } ?: -1
+                                } else {
+                                    -1
+                                }
+
+                                val peer = DiscoveredPeer(
+                                    serviceName = resolvedInfo.serviceName,
+                                    deviceName = devName,
+                                    ip = ip,
+                                    filePort = resolvedInfo.port,
+                                    chatPort = chatPort
+                                )
+
+                                synchronized(this@NsdHelper) {
+                                    val currentList = _discoveredPeers.value
+                                    if (currentList.none { it.ip == peer.ip && it.filePort == peer.filePort }) {
+                                        _discoveredPeers.value = currentList + peer
+                                        Log.i(tag, "Peer added: ${peer.deviceName} @ ${peer.ip}:${peer.filePort}")
+                                    }
                                 }
                             }
-                        }
-                    })
+                        })
+                    } catch (e: Exception) {
+                        Log.e(tag, "Concurrent resolve requests failed gracefully", e)
+                    }
                 }
             }
 
@@ -190,7 +200,7 @@ class NsdHelper(private val context: Context) {
         }
 
         try {
-            nsdManager.discoverServices("_peerlink._tcp", NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+            manager.discoverServices("_peerlink._tcp", NsdManager.PROTOCOL_DNS_SD, discoveryListener)
         } catch (e: Exception) {
             Log.e(tag, "Error starting discovery", e)
             isDiscovering = false
@@ -199,9 +209,10 @@ class NsdHelper(private val context: Context) {
 
     @Synchronized
     fun stopDiscovery() {
+        val manager = nsdManager ?: return
         if (!isDiscovering || discoveryListener == null) return
         try {
-            nsdManager.stopServiceDiscovery(discoveryListener)
+            manager.stopServiceDiscovery(discoveryListener)
         } catch (e: Exception) {
             Log.e(tag, "Error stopping discovery", e)
         } finally {
@@ -211,7 +222,7 @@ class NsdHelper(private val context: Context) {
         }
 
         try {
-            if (multicastLock.isHeld) {
+            if (multicastLock?.isHeld == true) {
                 multicastLock.release()
             }
         } catch (e: Exception) {
