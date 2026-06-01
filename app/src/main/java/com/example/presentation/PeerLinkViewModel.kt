@@ -64,6 +64,27 @@ class PeerLinkViewModel @Inject constructor(
 
     private var lastLoggedTransferId: String? = null
 
+    // Relocated properties first to ensure initialization safety
+    private val _selectedFiles = MutableStateFlow<List<com.example.domain.model.LocalFile>>(emptyList())
+    val selectedFiles = _selectedFiles.asStateFlow()
+
+    val stats = getTransferStatsUseCase()
+    val chatMessages = transferManager.chatManager.messages
+    val isChatConnected = transferManager.chatManager.isConnected
+
+    val discoveredPeers = transferManager.nsdHelper.discoveredPeers
+
+    private val _ipAddress = MutableStateFlow(NetworkUtils.getLocalIpv4Address() ?: "Unknown")
+    val ipAddress = _ipAddress.asStateFlow()
+
+    private val _inviteCode = MutableStateFlow<String?>(null)
+    val inviteCode = _inviteCode.asStateFlow()
+
+    private var approvalDeferred: CompletableDeferred<Boolean>? = null
+
+    private val _fingerprintToApprove = MutableStateFlow<String?>(null)
+    val fingerprintToApprove = _fingerprintToApprove.asStateFlow()
+
     init {
         _transferHistory.value = loadHistory()
 
@@ -217,14 +238,6 @@ class PeerLinkViewModel @Inject constructor(
         }
     }
 
-    private val _selectedFiles = MutableStateFlow<List<com.example.domain.model.LocalFile>>(emptyList())
-    val selectedFiles = _selectedFiles.asStateFlow()
-
-    val stats = getTransferStatsUseCase()
-    val chatMessages = transferManager.chatManager.messages
-    val isChatConnected = transferManager.chatManager.isConnected
-
-    val discoveredPeers = transferManager.nsdHelper.discoveredPeers
 
     fun startDiscovery() {
         transferManager.nsdHelper.startDiscovery()
@@ -251,16 +264,6 @@ class PeerLinkViewModel @Inject constructor(
         transferManager.chatManager.sendTextMessage(text)
     }
 
-    private val _ipAddress = MutableStateFlow(NetworkUtils.getLocalIpv4Address() ?: "Unknown")
-    val ipAddress = _ipAddress.asStateFlow()
-
-    private val _inviteCode = MutableStateFlow<String?>(null)
-    val inviteCode = _inviteCode.asStateFlow()
-
-    private var approvalDeferred: CompletableDeferred<Boolean>? = null
-
-    private val _fingerprintToApprove = MutableStateFlow<String?>(null)
-    val fingerprintToApprove = _fingerprintToApprove.asStateFlow()
 
     fun addFiles(context: Context, uris: List<Uri>) {
         viewModelScope.launch(Dispatchers.IO) {
