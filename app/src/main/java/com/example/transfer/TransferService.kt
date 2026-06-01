@@ -51,7 +51,11 @@ class TransferService : Service() {
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .build()
             
-        startForeground(NOTIFICATION_ID, notification, type)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification, type)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
         acquireLocks()
         return START_NOT_STICKY
     }

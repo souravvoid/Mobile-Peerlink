@@ -13,6 +13,8 @@
                      android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" 
                      android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" 
+                     android:maxSdkVersion="32" />
 
     <!-- Background & Notifications Permissions -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
