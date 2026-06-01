@@ -39,28 +39,37 @@ class PeerLinkViewModel @Inject constructor(
         }
     }
 
-    fun sendFileViaChat(context: Context, uri: Uri) {
+    fun sendFileViaChat(context: Context, uris: List<Uri>) {
         val sender = FileSender(context)
         viewModelScope.launch(Dispatchers.IO) {
             val port = sender.startListening()
             
             var fileName = "unknown"
             var fileSize = 1L
-            val cursor = context.contentResolver.query(uri, null, null, null, null)
-            cursor?.use {
-                if (it.moveToFirst()) {
-                    val nameIdx = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    val sizeIdx = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
-                    if (nameIdx != -1) fileName = it.getString(nameIdx)
-                    if (sizeIdx != -1) fileSize = it.getLong(sizeIdx)
+            // Use the first file for chat display fallback
+            if (uris.isNotEmpty()) {
+                val cursor = context.contentResolver.query(uris.first(), null, null, null, null)
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        val nameIdx = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        val sizeIdx = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                        if (nameIdx != -1) fileName = it.getString(nameIdx)
+                        if (sizeIdx != -1) fileSize = it.getLong(sizeIdx)
+                    }
+                }
+                if (uris.size > 1) {
+                    fileName = "$fileName and ${uris.size - 1} more"
                 }
             }
             
             transferManager.chatManager.sendFileOffer(fileName, fileSize, port)
             transferManager.monitorSender(sender)
-            sender.acceptAndSend(uri, onApprovalRequested = { true })
+            sender.acceptAndSend(uris, onApprovalRequested = { true })
         }
     }
+
+    private val _selectedFiles = MutableStateFlow<List<Uri>>(emptyList())
+    val selectedFiles = _selectedFiles.asStateFlow()
 
     val stats = getTransferStatsUseCase()
     val chatMessages = transferManager.chatManager.messages
@@ -81,9 +90,22 @@ class PeerLinkViewModel @Inject constructor(
     private val _fingerprintToApprove = MutableStateFlow<String?>(null)
     val fingerprintToApprove = _fingerprintToApprove.asStateFlow()
 
-    fun startSending(uri: Uri) {
+    fun addFiles(uris: List<Uri>) {
+        _selectedFiles.value = (_selectedFiles.value + uris).distinct()
+    }
+
+    fun removeFile(uri: Uri) {
+        _selectedFiles.value = _selectedFiles.value - uri
+    }
+
+    fun clearFiles() {
+        _selectedFiles.value = emptyList()
+    }
+
+    fun startSending() {
+        if (_selectedFiles.value.isEmpty()) return
         resetTransferUseCase()
-        startSendingUseCase(uri, onApproval = { fingerprint ->
+        startSendingUseCase(_selectedFiles.value, onApproval = { fingerprint ->
             _fingerprintToApprove.value = fingerprint
             val deferred = CompletableDeferred<Boolean>()
             approvalDeferred = deferred

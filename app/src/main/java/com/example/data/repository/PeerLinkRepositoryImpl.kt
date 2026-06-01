@@ -15,8 +15,8 @@ class PeerLinkRepositoryImpl @Inject constructor(
 
     override val transferStats: StateFlow<TransferStats> = transferManager.stats
 
-    override fun startSending(uri: Uri, onApproval: suspend (String) -> Boolean, configurePort: (Int, Int) -> Unit) {
-        transferManager.startSending(uri, onApproval, configurePort)
+    override fun startSending(uris: List<Uri>, onApproval: suspend (String) -> Boolean, configurePort: (Int, Int) -> Unit) {
+        transferManager.startSending(uris, onApproval, configurePort)
     }
 
     override fun startReceiving(ip: String, port: Int, onApproval: suspend (String) -> Boolean) {

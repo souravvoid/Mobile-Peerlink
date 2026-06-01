@@ -22,6 +22,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -42,6 +44,8 @@ fun MainApp(viewModel: PeerLinkViewModel) {
     val navController = rememberNavController()
     
     val fingerprint by viewModel.fingerprintToApprove.collectAsState()
+    val stats by viewModel.stats.collectAsState()
+    
     if (fingerprint != null) {
         AlertDialog(
             onDismissRequest = { viewModel.answerApproval(false) },
@@ -49,8 +53,25 @@ fun MainApp(viewModel: PeerLinkViewModel) {
             title = { Text("Approve Connection", color = TextPrimary) },
             text = {
                 Column {
+                    val metadata = stats.metadata
+                    if (metadata != null) {
+                        Text("Incoming Transfer:", color = AuroraTeal, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp)) {
+                            items(metadata.files) { file ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Info, contentDescription = null, tint = AuroraViolet, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(file.fileName, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Total Size: ${metadata.totalSize / 1024 / 1024} MB", color = TextSecondary)
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
                     Text("Verify peer fingerprint:", color = TextSecondary)
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = fingerprint!!,
                         color = AuroraTeal,
@@ -72,7 +93,7 @@ fun MainApp(viewModel: PeerLinkViewModel) {
             },
             dismissButton = {
                 OutlinedButton(onClick = { viewModel.answerApproval(false) }) {
-                    Text("Reject", color = Pink80)
+                    Text("Reject", color = Color.Red)
                 }
             }
         )
@@ -150,9 +171,11 @@ fun SendScreen(navController: NavController, viewModel: PeerLinkViewModel) {
     val inviteCode by viewModel.inviteCode.collectAsState()
     val stats by viewModel.stats.collectAsState()
     
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            viewModel.startSending(uri)
+    val selectedFiles by viewModel.selectedFiles.collectAsState()
+    
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            viewModel.addFiles(uris)
         }
     }
     
@@ -169,20 +192,74 @@ fun SendScreen(navController: NavController, viewModel: PeerLinkViewModel) {
         Spacer(modifier = Modifier.height(32.dp))
         
         if (inviteCode == null && stats.progress == 0f && stats.error == null && !stats.isComplete && !stats.isConnecting && !stats.isWaitingForApproval) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(GlassLayer)
-                    .border(2.dp, AuroraTeal, RoundedCornerShape(24.dp))
-                    .clickable { launcher.launch("*/*") },
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.ArrowUpward, contentDescription = null, tint = AuroraTeal, modifier = Modifier.size(48.dp))
-                    Spacer(Modifier.height(16.dp))
-                    Text("Tap to select file", color = TextPrimary)
+            if (selectedFiles.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(GlassLayer)
+                        .border(2.dp, AuroraTeal, RoundedCornerShape(24.dp))
+                        .clickable { launcher.launch(arrayOf("*/*")) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.ArrowUpward, contentDescription = null, tint = AuroraTeal, modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.height(16.dp))
+                        Text("Tap to select files", color = TextPrimary)
+                    }
+                }
+            } else {
+                LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    items(selectedFiles) { uri ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .background(GlassLayer, RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Basic Icon
+                            Icon(Icons.Default.Info, contentDescription = "File", tint = AuroraViolet, modifier = Modifier.size(32.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            var fileName = "Unknown file"
+                            var fileSize = 0L
+                            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                                if (cursor.moveToFirst()) {
+                                    val nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                    val sizeIdx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                                    if(nameIdx != -1) fileName = cursor.getString(nameIdx)
+                                    if(sizeIdx != -1) fileSize = cursor.getLong(sizeIdx)
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(fileName, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("${fileSize / 1024} KB", color = TextSecondary, fontSize = 12.sp)
+                            }
+                            IconButton(onClick = { viewModel.removeFile(uri) }) {
+                                Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.Red)
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    Button(
+                        onClick = { launcher.launch(arrayOf("*/*")) },
+                        colors = ButtonDefaults.buttonColors(containerColor = CoreDarkVariant),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Add More", color = AuroraCyan)
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Button(
+                        onClick = { viewModel.startSending() },
+                        colors = ButtonDefaults.buttonColors(containerColor = AuroraTeal),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Send", color = CoreDeepSpace)
+                    }
                 }
             }
         } else if (inviteCode != null && !stats.isComplete && stats.error == null && stats.progress == 0f && !stats.isWaitingForApproval) {
@@ -298,7 +375,7 @@ fun ChatView(viewModel: PeerLinkViewModel) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
                 if (uri != null) {
-                    viewModel.sendFileViaChat(context, uri)
+                    viewModel.sendFileViaChat(context, listOf(uri))
                 }
             }
             IconButton(

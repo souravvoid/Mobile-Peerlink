@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 interface PeerLinkRepository {
     val transferStats: StateFlow<TransferStats>
-    fun startSending(uri: Uri, onApproval: suspend (String) -> Boolean, configurePort: (Int, Int) -> Unit)
+    fun startSending(uris: List<Uri>, onApproval: suspend (String) -> Boolean, configurePort: (Int, Int) -> Unit)
     fun startReceiving(ip: String, port: Int, onApproval: suspend (String) -> Boolean)
     fun reset()
 }

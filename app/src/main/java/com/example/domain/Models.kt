@@ -1,5 +1,7 @@
 package com.example.domain
 
+import com.example.domain.model.TransferMetadata
+
 data class TransferStats(
     val progress: Float = 0f,
     val bytesTransferred: Long = 0,
@@ -10,5 +12,8 @@ data class TransferStats(
     val isConnecting: Boolean = true,
     val isWaitingForApproval: Boolean = false,
     val currentFileName: String? = null,
-    val remoteFingerprint: String? = null
+    val remoteFingerprint: String? = null,
+    val metadata: TransferMetadata? = null,
+    val currentFileIndex: Int = 0,
+    val totalFiles: Int = 0
 )

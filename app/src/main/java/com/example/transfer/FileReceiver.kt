@@ -4,6 +4,9 @@ import android.content.Context
 import android.os.Environment
 import com.example.domain.TransferStats
 import com.example.security.CryptoUtils
+import com.example.domain.model.TransferMetadata
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,6 +16,7 @@ import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.net.Socket
+import java.security.SecureRandom
 
 class FileReceiver(private val context: Context) {
     
@@ -43,6 +47,28 @@ class FileReceiver(private val context: Context) {
             outStream.flush()
 
             val fingerprint = CryptoUtils.generateFingerprint(peerKeyBytes)
+            val aesKey = CryptoUtils.deriveAESKey(keyPair.private, peerPublicKey)
+
+            val baseIv = ByteArray(CryptoUtils.GCM_IV_LENGTH)
+            inStream.readFully(baseIv)
+            
+            val encMetaLen = inStream.readInt()
+            val encMeta = ByteArray(encMetaLen)
+            inStream.readFully(encMeta)
+            
+            val metaBytes = CryptoUtils.decrypt(encMeta, aesKey, baseIv)
+            val metadataJson = String(metaBytes, Charsets.UTF_8)
+            
+            val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
+            val adapter = moshi.adapter(TransferMetadata::class.java)
+            val metadata = adapter.fromJson(metadataJson) ?: throw Exception("Invalid metadata format")
+            
+            _stats.value = _stats.value.copy(
+                metadata = metadata,
+                totalBytes = metadata.totalSize,
+                totalFiles = metadata.files.size
+            )
+
             _stats.value = _stats.value.copy(remoteFingerprint = fingerprint)
 
             val peerApproved = inStream.readBoolean()
@@ -57,56 +83,59 @@ class FileReceiver(private val context: Context) {
             
             _stats.value = _stats.value.copy(isWaitingForApproval = false)
 
-            val aesKey = CryptoUtils.deriveAESKey(keyPair.private, peerPublicKey)
-
-            val baseIv = ByteArray(CryptoUtils.GCM_IV_LENGTH)
-            inStream.readFully(baseIv)
-            
-            val fileSize = inStream.readLong()
-            val encMetaLen = inStream.readInt()
-            val encMeta = ByteArray(encMetaLen)
-            inStream.readFully(encMeta)
-            
-            val metaBytes = CryptoUtils.decrypt(encMeta, aesKey, baseIv)
-            val rawFileName = String(metaBytes, Charsets.UTF_8)
-            
-            val safeFileName = File(rawFileName).name
-            _stats.value = _stats.value.copy(currentFileName = safeFileName, totalBytes = fileSize)
-
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             val peerLinkDir = File(downloadsDir, "PeerLink").apply { mkdirs() }
-            val outputFile = File(peerLinkDir, safeFileName)
 
-            FileOutputStream(outputFile).use { fileOut ->
-                var totalWritten = 0L
+            var globalTotalWritten = 0L
+            val startTime = System.currentTimeMillis()
+
+            for ((index, fileItem) in metadata.files.withIndex()) {
+                val safeFileName = File(fileItem.fileName).name
+                _stats.value = _stats.value.copy(
+                    currentFileName = safeFileName,
+                    currentFileIndex = index
+                )
+                
+                val outputFile = File(peerLinkDir, safeFileName)
+                var currentTotalWritten = 0L
                 var ivCounter = 1
-                val startTime = System.currentTimeMillis()
 
-                while (true) {
-                    val chunkLen = inStream.readInt()
-                    if (chunkLen == -1) break
+                FileOutputStream(outputFile).use { fileOut ->
+                    while (true) {
+                        val chunkLen = inStream.readInt()
+                        if (chunkLen == -1) {
+                            break // End of this file
+                        } else if (chunkLen == -2) {
+                            break // End of all files - shouldn't hit this inside file loop, but for safety
+                        }
 
-                    val encChunk = ByteArray(chunkLen)
-                    inStream.readFully(encChunk)
+                        val encChunk = ByteArray(chunkLen)
+                        inStream.readFully(encChunk)
 
-                    val currentIv = baseIv.copyOf()
-                    currentIv[11] = (currentIv[11] + ivCounter).toByte()
+                        val currentIv = baseIv.copyOf()
+                        currentIv[11] = (currentIv[11] + ivCounter).toByte()
 
-                    val plainChunk = CryptoUtils.decrypt(encChunk, aesKey, currentIv)
-                    fileOut.write(plainChunk)
-                    
-                    totalWritten += plainChunk.size
-                    ivCounter++
-                    
-                    val elapsedSec = (System.currentTimeMillis() - startTime) / 1000f
-                    val speed = if (elapsedSec > 0) (totalWritten / 1024f / 1024f) / elapsedSec else 0f
-                    
-                    _stats.value = _stats.value.copy(
-                        progress = totalWritten.toFloat() / fileSize.toFloat(),
-                        bytesTransferred = totalWritten,
-                        speedMBps = speed
-                    )
+                        val plainChunk = CryptoUtils.decrypt(encChunk, aesKey, currentIv)
+                        fileOut.write(plainChunk)
+                        
+                        globalTotalWritten += plainChunk.size
+                        ivCounter++
+                        
+                        val elapsedSec = (System.currentTimeMillis() - startTime) / 1000f
+                        val speed = if (elapsedSec > 0) (globalTotalWritten / 1024f / 1024f) / elapsedSec else 0f
+                        
+                        _stats.value = _stats.value.copy(
+                            progress = globalTotalWritten.toFloat() / metadata.totalSize.toFloat(),
+                            bytesTransferred = globalTotalWritten,
+                            speedMBps = speed
+                        )
+                    }
                 }
+            }
+            
+            val endMarker = inStream.readInt()
+            if (endMarker != -2) {
+                // Warning, unexpected end marker
             }
             
             _stats.value = _stats.value.copy(isComplete = true, progress = 1f)

@@ -7,7 +7,7 @@ import javax.inject.Inject
 class StartSendingUseCase @Inject constructor(
     private val repository: PeerLinkRepository
 ) {
-    operator fun invoke(uri: Uri, onApproval: suspend (String) -> Boolean, configurePort: (Int, Int) -> Unit) {
-        repository.startSending(uri, onApproval, configurePort)
+    operator fun invoke(uris: List<Uri>, onApproval: suspend (String) -> Boolean, configurePort: (Int, Int) -> Unit) {
+        repository.startSending(uris, onApproval, configurePort)
     }
 }

@@ -42,7 +42,7 @@ class TransferManager(private val context: Context) {
         }
     }
 
-    fun startSending(uri: Uri, onApproval: suspend (String) -> Boolean, onPortReady: (Int, Int) -> Unit) {
+    fun startSending(uris: List<Uri>, onApproval: suspend (String) -> Boolean, onPortReady: (Int, Int) -> Unit) {
         Intent(context, TransferService::class.java).also { intent ->
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -67,7 +67,7 @@ class TransferManager(private val context: Context) {
             chatManager.startHost { chatPort ->
                  onPortReady(port, chatPort)
             }
-            sender.acceptAndSend(uri, onApproval)
+            sender.acceptAndSend(uris, onApproval)
         }
     }
 
