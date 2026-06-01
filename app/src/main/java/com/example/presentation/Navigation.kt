@@ -38,6 +38,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.theme.*
+import com.example.network.DiscoveredPeer
 
 @Composable
 fun MainApp(viewModel: PeerLinkViewModel) {
@@ -285,6 +286,14 @@ fun SendScreen(navController: NavController, viewModel: PeerLinkViewModel) {
 fun ReceiveScreen(navController: NavController, viewModel: PeerLinkViewModel) {
     var inputCode by remember { mutableStateOf("") }
     val stats by viewModel.stats.collectAsState()
+    val discoveredPeers by viewModel.discoveredPeers.collectAsState()
+    
+    DisposableEffect(Unit) {
+        viewModel.startDiscovery()
+        onDispose {
+            viewModel.stopDiscovery()
+        }
+    }
     
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         IconButton(onClick = { 
@@ -296,9 +305,11 @@ fun ReceiveScreen(navController: NavController, viewModel: PeerLinkViewModel) {
         
         Spacer(modifier = Modifier.height(16.dp))
         Text("Receive File", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = AuroraViolet)
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         
         if (stats.progress == 0f && stats.error == null && !stats.isComplete && !stats.isConnecting && !stats.isWaitingForApproval) {
+            Text("Enter invite code manually:", color = TextSecondary, fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = inputCode,
                 onValueChange = { inputCode = it },
@@ -312,14 +323,140 @@ fun ReceiveScreen(navController: NavController, viewModel: PeerLinkViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = { viewModel.startReceiving(inputCode) },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 enabled = inputCode.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(containerColor = AuroraViolet)
             ) {
-                Text("Connect", color = CoreDeepSpace, fontWeight = FontWeight.Bold)
+                Text("Connect Manually", color = CoreDeepSpace, fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // --- Nearby Discovery Divider ---
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = CoreDarkVariant)
+                Text(
+                    text = "OR CONNECT DIRECTLY",
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                HorizontalDivider(modifier = Modifier.weight(1f), color = CoreDarkVariant)
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // --- Nearby Senders Section ---
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Nearby Senders", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AuroraTeal)
+                CircularProgressIndicator(
+                    color = AuroraTeal,
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 1.5.dp
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (discoveredPeers.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(GlassLayer)
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Scanning Info Icon",
+                            tint = AuroraTeal,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Scanning for active PeerLink senders on the same network...",
+                            color = TextSecondary,
+                            textAlign = TextAlign.Center,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(discoveredPeers) { peer ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(GlassLayer)
+                                .border(1.dp, AuroraTeal.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                                .clickable { viewModel.connectToDiscoveredPeer(peer) }
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(AuroraTeal.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = "Peer Device Icon",
+                                    tint = AuroraTeal,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = peer.deviceName,
+                                    color = TextPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "IP: ${peer.ip}",
+                                    color = TextSecondary,
+                                    fontSize = 12.sp
+                                )
+                            }
+
+                            Button(
+                                onClick = { viewModel.connectToDiscoveredPeer(peer) },
+                                colors = ButtonDefaults.buttonColors(containerColor = AuroraTeal),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                modifier = Modifier.height(36.dp)
+                            ) {
+                                Text("Connect", fontSize = 12.sp, color = CoreDeepSpace, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
             }
         } else {
             TransferProgressView(stats)

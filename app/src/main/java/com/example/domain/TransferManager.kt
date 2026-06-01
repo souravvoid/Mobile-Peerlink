@@ -21,6 +21,7 @@ import com.example.chat.ChatManager
 class TransferManager(private val context: Context) {
     private var transferService: TransferService? = null
     val chatManager = ChatManager()
+    val nsdHelper = com.example.network.NsdHelper(context)
     
     private val _stats = MutableStateFlow(TransferStats())
     val stats: StateFlow<TransferStats> = _stats.asStateFlow()
@@ -66,6 +67,7 @@ class TransferManager(private val context: Context) {
             val port = sender.startListening()
             chatManager.startHost { chatPort ->
                  onPortReady(port, chatPort)
+                 nsdHelper.registerService(port, chatPort)
             }
             sender.acceptAndSend(uris, onApproval)
         }
@@ -112,5 +114,6 @@ class TransferManager(private val context: Context) {
         transferService?.fileReceiver?.cancel()
         transferService?.stopTransfer()
         _stats.value = TransferStats()
+        nsdHelper.unregisterService()
     }
 }

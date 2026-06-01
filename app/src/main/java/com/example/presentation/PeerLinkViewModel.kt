@@ -75,6 +75,29 @@ class PeerLinkViewModel @Inject constructor(
     val chatMessages = transferManager.chatManager.messages
     val isChatConnected = transferManager.chatManager.isConnected
 
+    val discoveredPeers = transferManager.nsdHelper.discoveredPeers
+
+    fun startDiscovery() {
+        transferManager.nsdHelper.startDiscovery()
+    }
+
+    fun stopDiscovery() {
+        transferManager.nsdHelper.stopDiscovery()
+    }
+
+    fun connectToDiscoveredPeer(peer: com.example.network.DiscoveredPeer) {
+        resetTransferUseCase()
+        if (peer.chatPort != -1) {
+            transferManager.chatManager.connectAsClient(peer.ip, peer.chatPort)
+        }
+        startReceivingUseCase(peer.ip, peer.filePort, onApproval = { fingerprint ->
+            _fingerprintToApprove.value = fingerprint
+            val deferred = CompletableDeferred<Boolean>()
+            approvalDeferred = deferred
+            deferred.await()
+        })
+    }
+
     fun sendChatMessage(text: String) {
         transferManager.chatManager.sendTextMessage(text)
     }
