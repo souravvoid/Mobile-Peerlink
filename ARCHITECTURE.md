@@ -17,3 +17,21 @@ This structure ensures decoupling between the presentation framework (Jetpack Co
 ## Data Flow
 *   Unidirectional Data Flow (UDF) via ViewModels.
 *   Background transfers dispatch to ForegroundService, which holds singletons (via Hilt or manual instances binded to service). The UI connects to these active states via bounded Flows.
+
+## Strengths
+- **MVVM Integration**: Strong adoption of `ViewModel` with `StateFlow` ensures resilient UI states across configuration changes.
+- **Dependency Injection**: Integrated DI via Hilt ensures decoupled object instantiation, easing testability.
+- **Separation of Concerns**: Networking logic, cryptographic operations, and UI code are compartmentalized effectively.
+- **Coroutines and Flow**: Utilizes lightweight concurrency mechanisms (Kotlin Coroutines).
+- **UI Framework**: Modern declarative UI framework usage via Jetpack Compose.
+
+## Weaknesses & Technical Debt
+- **Error Handling**: Certain network operations emit generic errors or drop silent exceptions.
+- **God Classes**: `TransferManager.kt` contains dense logic intersecting bounds of coordination and data formatting that could be separated into discrete components (e.g., TransferCoordinator vs SessionManager).
+- **Socket Handling**: Blocking thread IO in some areas (e.g., chat socket loops) could be shifted to Dispatchers.IO channels to avoid thread starvation.
+
+## Future Improvements
+- Implement a robust Chunked File Transfer strategy allowing pause/resume operations.
+- Adopt MVI (Model-View-Intent) in Compose architectures to yield explicitly tracked uni-directional state behaviors.
+- Better encapsulation of TCP stream handling utilizing Kotlin Ktor or Netty to eliminate imperative socket boilerplate.
+- Ensure strict lifecycle monitoring for the foreground service with generic fault tolerance parameters across foreground scopes.

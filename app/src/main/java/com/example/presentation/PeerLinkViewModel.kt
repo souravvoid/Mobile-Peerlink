@@ -68,7 +68,7 @@ class PeerLinkViewModel @Inject constructor(
         }
     }
 
-    private val _selectedFiles = MutableStateFlow<List<Uri>>(emptyList())
+    private val _selectedFiles = MutableStateFlow<List<com.example.domain.model.LocalFile>>(emptyList())
     val selectedFiles = _selectedFiles.asStateFlow()
 
     val stats = getTransferStatsUseCase()
@@ -90,12 +90,32 @@ class PeerLinkViewModel @Inject constructor(
     private val _fingerprintToApprove = MutableStateFlow<String?>(null)
     val fingerprintToApprove = _fingerprintToApprove.asStateFlow()
 
-    fun addFiles(uris: List<Uri>) {
-        _selectedFiles.value = (_selectedFiles.value + uris).distinct()
+    fun addFiles(context: Context, uris: List<Uri>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val validFiles = uris.mapNotNull { uri ->
+                var name = "Unknown file"
+                var size = 0L
+                try {
+                    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                            val sizeIdx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                            if (nameIdx != -1) name = cursor.getString(nameIdx)
+                            if (sizeIdx != -1) size = cursor.getLong(sizeIdx)
+                        }
+                    }
+                    com.example.domain.model.LocalFile(uri, name, size)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    null
+                }
+            }
+            _selectedFiles.value = (_selectedFiles.value + validFiles).distinctBy { it.uri }
+        }
     }
 
     fun removeFile(uri: Uri) {
-        _selectedFiles.value = _selectedFiles.value - uri
+        _selectedFiles.value = _selectedFiles.value.filter { it.uri != uri }
     }
 
     fun clearFiles() {
@@ -105,7 +125,8 @@ class PeerLinkViewModel @Inject constructor(
     fun startSending() {
         if (_selectedFiles.value.isEmpty()) return
         resetTransferUseCase()
-        startSendingUseCase(_selectedFiles.value, onApproval = { fingerprint ->
+        val uris = _selectedFiles.value.map { it.uri }
+        startSendingUseCase(uris, onApproval = { fingerprint ->
             _fingerprintToApprove.value = fingerprint
             val deferred = CompletableDeferred<Boolean>()
             approvalDeferred = deferred

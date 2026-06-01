@@ -9,7 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -175,7 +175,7 @@ fun SendScreen(navController: NavController, viewModel: PeerLinkViewModel) {
     
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            viewModel.addFiles(uris)
+            viewModel.addFiles(context, uris)
         }
     }
     
@@ -211,7 +211,7 @@ fun SendScreen(navController: NavController, viewModel: PeerLinkViewModel) {
                 }
             } else {
                 LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    items(selectedFiles) { uri ->
+                    items(selectedFiles) { localFile ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -223,21 +223,12 @@ fun SendScreen(navController: NavController, viewModel: PeerLinkViewModel) {
                             // Basic Icon
                             Icon(Icons.Default.Info, contentDescription = "File", tint = AuroraViolet, modifier = Modifier.size(32.dp))
                             Spacer(modifier = Modifier.width(12.dp))
-                            var fileName = "Unknown file"
-                            var fileSize = 0L
-                            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                                if (cursor.moveToFirst()) {
-                                    val nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                                    val sizeIdx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
-                                    if(nameIdx != -1) fileName = cursor.getString(nameIdx)
-                                    if(sizeIdx != -1) fileSize = cursor.getLong(sizeIdx)
-                                }
-                            }
+                            
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(fileName, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text("${fileSize / 1024} KB", color = TextSecondary, fontSize = 12.sp)
+                                Text(localFile.name, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("${localFile.size / 1024} KB", color = TextSecondary, fontSize = 12.sp)
                             }
-                            IconButton(onClick = { viewModel.removeFile(uri) }) {
+                            IconButton(onClick = { viewModel.removeFile(localFile.uri) }) {
                                 Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.Red)
                             }
                         }
@@ -407,7 +398,7 @@ fun ChatView(viewModel: PeerLinkViewModel) {
                 },
                 modifier = Modifier.background(AuroraTeal, RoundedCornerShape(50)).size(48.dp)
             ) {
-                Icon(Icons.Default.Send, contentDescription = "Send", tint = CoreDeepSpace)
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = CoreDeepSpace)
             }
         }
     }
