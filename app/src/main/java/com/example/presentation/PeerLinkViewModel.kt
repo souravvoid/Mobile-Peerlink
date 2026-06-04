@@ -85,6 +85,14 @@ class PeerLinkViewModel @Inject constructor(
     private val _fingerprintToApprove = MutableStateFlow<String?>(null)
     val fingerprintToApprove = _fingerprintToApprove.asStateFlow()
 
+    private val _activeException = MutableStateFlow<com.example.util.PeerLinkException?>(null)
+    val activeException = _activeException.asStateFlow()
+
+    fun clearActiveException() {
+        _activeException.value = null
+        transferManager.nsdHelper.clearDiscoveryException()
+    }
+
     init {
         _transferHistory.value = loadHistory()
 
@@ -97,11 +105,23 @@ class PeerLinkViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            transferManager.nsdHelper.discoveryException.collect { nsdEx ->
+                if (nsdEx != null) {
+                    _activeException.value = nsdEx
+                }
+            }
+        }
+
+        viewModelScope.launch {
             stats.collect { currentStats ->
                 val transferId = currentStats.metadata?.transferId
                 val fileName = currentStats.currentFileName ?: currentStats.metadata?.files?.firstOrNull()?.fileName ?: "File Transfer"
                 val totalSize = currentStats.metadata?.totalSize ?: currentStats.totalBytes
                 
+                if (currentStats.exception != null) {
+                    _activeException.value = currentStats.exception
+                }
+
                 if (transferId != null && transferId != lastLoggedTransferId) {
                     if (currentStats.isComplete) {
                         lastLoggedTransferId = transferId

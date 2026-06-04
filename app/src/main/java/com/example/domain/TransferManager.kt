@@ -64,12 +64,17 @@ class TransferManager(private val context: Context) {
         }
         
         CoroutineScope(Dispatchers.IO).launch {
-            val port = sender.startListening()
-            chatManager.startHost { chatPort ->
-                 onPortReady(port, chatPort)
-                 nsdHelper.registerService(port, chatPort)
+            try {
+                val port = sender.startListening()
+                chatManager.startHost { chatPort ->
+                     onPortReady(port, chatPort)
+                     nsdHelper.registerService(port, chatPort)
+                }
+                sender.acceptAndSend(uris, onApproval)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                sender.reportException(e)
             }
-            sender.acceptAndSend(uris, onApproval)
         }
     }
 

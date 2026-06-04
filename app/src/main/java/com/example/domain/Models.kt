@@ -1,6 +1,7 @@
 package com.example.domain
 
 import com.example.domain.model.TransferMetadata
+import com.example.util.PeerLinkException
 
 data class TransferStats(
     val progress: Float = 0f,
@@ -9,6 +10,7 @@ data class TransferStats(
     val speedMBps: Float = 0f,
     val isComplete: Boolean = false,
     val error: String? = null,
+    val exception: PeerLinkException? = null,
     val isConnecting: Boolean = false,
     val isWaitingForApproval: Boolean = false,
     val currentFileName: String? = null,
@@ -17,3 +19,4 @@ data class TransferStats(
     val currentFileIndex: Int = 0,
     val totalFiles: Int = 0
 )
+

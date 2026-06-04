@@ -53,6 +53,7 @@ fun MainApp(viewModel: PeerLinkViewModel) {
 
     val fingerprint by viewModel.fingerprintToApprove.collectAsState()
     val stats by viewModel.stats.collectAsState()
+    val activeException by viewModel.activeException.collectAsState()
 
     // 🔒 Establish Secure pairing dialog for connection handshake approval
     if (fingerprint != null) {
@@ -138,70 +139,234 @@ fun MainApp(viewModel: PeerLinkViewModel) {
         )
     }
 
-    // Main structural layout incorporating bottom tabs on home, history, and settings screens
-    Scaffold(
-        containerColor = CoreDeepSpace,
-        contentColor = TextPrimary,
-        bottomBar = {
-            if (currentRoute in listOf("home", "history", "settings")) {
-                NavigationBar(
-                    containerColor = CoreDarkVariant,
-                    tonalElevation = 8.dp,
-                    modifier = Modifier.clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Main structural layout incorporating bottom tabs on home, history, and settings screens
+        Scaffold(
+            containerColor = CoreDeepSpace,
+            contentColor = TextPrimary,
+            bottomBar = {
+                if (currentRoute in listOf("home", "history", "settings")) {
+                    NavigationBar(
+                        containerColor = CoreDarkVariant,
+                        tonalElevation = 8.dp,
+                        modifier = Modifier.clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    ) {
+                        NavigationBarItem(
+                            selected = currentRoute == "home",
+                            onClick = { navController.navigate("home") { popUpTo("home") { saveState = true }; launchSingleTop = true; restoreState = true } },
+                            icon = { Icon(Icons.Default.Place, contentDescription = "Discover peers") },
+                            label = { Text("Discovery", fontSize = 12.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = CoreDeepSpace,
+                                selectedTextColor = AuroraTeal,
+                                indicatorColor = AuroraTeal,
+                                unselectedIconColor = TextSecondary,
+                                unselectedTextColor = TextSecondary
+                            )
+                        )
+                        NavigationBarItem(
+                            selected = currentRoute == "history",
+                            onClick = { navController.navigate("history") { popUpTo("home") { saveState = true }; launchSingleTop = true; restoreState = true } },
+                            icon = { Icon(Icons.Default.History, contentDescription = "Transfers Log") },
+                            label = { Text("History", fontSize = 12.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = CoreDeepSpace,
+                                selectedTextColor = AuroraViolet,
+                                indicatorColor = AuroraViolet,
+                                unselectedIconColor = TextSecondary,
+                                unselectedTextColor = TextSecondary
+                            )
+                        )
+                        NavigationBarItem(
+                            selected = currentRoute == "settings",
+                            onClick = { navController.navigate("settings") { popUpTo("home") { saveState = true }; launchSingleTop = true; restoreState = true } },
+                            icon = { Icon(Icons.Default.Settings, contentDescription = "Configuration settings") },
+                            label = { Text("Settings", fontSize = 12.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = CoreDeepSpace,
+                                selectedTextColor = AuroraCyan,
+                                indicatorColor = AuroraCyan,
+                                unselectedIconColor = TextSecondary,
+                                unselectedTextColor = TextSecondary
+                            )
+                        )
+                    }
+                }
+            }
+        ) { padding ->
+            NavHost(
+                navController = navController,
+                startDestination = "home",
+                modifier = Modifier.padding(padding)
+            ) {
+                composable("home") { HomeScreen(navController, viewModel) }
+                composable("send") { SendScreen(navController, viewModel) }
+                composable("receive") { ReceiveScreen(navController, viewModel) }
+                composable("history") { HistoryScreen(viewModel) }
+                composable("settings") { SettingsScreen(viewModel) }
+                composable("file_browser") { FileBrowserScreen(navController, viewModel) }
+            }
+        }
+
+        // Custom High-Fidelity Error Notification Banner
+        AnimatedVisibility(
+            visible = activeException != null,
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
+            ) + fadeIn(),
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
+            ) + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(16.dp)
+                .padding(bottom = if (currentRoute in listOf("home", "history", "settings")) 80.dp else 0.dp)
+        ) {
+            if (activeException != null) {
+                ErrorSnackbarCard(
+                    exception = activeException!!,
+                    onDismiss = { viewModel.clearActiveException() }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ErrorSnackbarCard(
+    exception: com.example.util.PeerLinkException,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .widthIn(max = 600.dp),
+        colors = CardDefaults.cardColors(containerColor = CoreDarkVariant),
+        shape = RoundedCornerShape(20.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.5.dp,
+            Brush.horizontalGradient(
+                listOf(
+                    Color(0xFFEF4444),
+                    Color(0xFFEE5959),
+                    Color(0xFFF97316)
+                )
+            )
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Determine appropriate icon dynamically
+                val icon = when (exception) {
+                    is com.example.util.PeerLinkException.DiscoveryException -> Icons.Default.Search
+                    is com.example.util.PeerLinkException.SocketConnectionException -> Icons.Default.SignalWifi4Bar
+                    is com.example.util.PeerLinkException.ConnectionInterruptedException -> Icons.Default.Warning
+                    is com.example.util.PeerLinkException.FileAccessPermissionException -> Icons.Default.Folder
+                    is com.example.util.PeerLinkException.PeerRejectedException -> Icons.Default.Lock
+                    is com.example.util.PeerLinkException.EncryptionHandshakeException -> Icons.Default.Lock
+                    else -> Icons.Default.Warning
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFFEF4444).copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    NavigationBarItem(
-                        selected = currentRoute == "home",
-                        onClick = { navController.navigate("home") { popUpTo("home") { saveState = true }; launchSingleTop = true; restoreState = true } },
-                        icon = { Icon(Icons.Default.Place, contentDescription = "Discover peers") },
-                        label = { Text("Discovery", fontSize = 12.sp) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = CoreDeepSpace,
-                            selectedTextColor = AuroraTeal,
-                            indicatorColor = AuroraTeal,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary
-                        )
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = "Error notification icon",
+                        tint = Color(0xFFEF4444),
+                        modifier = Modifier.size(24.dp)
                     )
-                    NavigationBarItem(
-                        selected = currentRoute == "history",
-                        onClick = { navController.navigate("history") { popUpTo("home") { saveState = true }; launchSingleTop = true; restoreState = true } },
-                        icon = { Icon(Icons.Default.History, contentDescription = "Transfers Log") },
-                        label = { Text("History", fontSize = 12.sp) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = CoreDeepSpace,
-                            selectedTextColor = AuroraViolet,
-                            indicatorColor = AuroraViolet,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary
-                        )
+                }
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = exception.title,
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
-                    NavigationBarItem(
-                        selected = currentRoute == "settings",
-                        onClick = { navController.navigate("settings") { popUpTo("home") { saveState = true }; launchSingleTop = true; restoreState = true } },
-                        icon = { Icon(Icons.Default.Settings, contentDescription = "Configuration settings") },
-                        label = { Text("Settings", fontSize = 12.sp) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = CoreDeepSpace,
-                            selectedTextColor = AuroraCyan,
-                            indicatorColor = AuroraCyan,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary
-                        )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = exception.description,
+                        color = TextPrimary.copy(alpha = 0.9f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close notifications banner",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
-        }
-    ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = "home",
-            modifier = Modifier.padding(padding)
-        ) {
-            composable("home") { HomeScreen(navController, viewModel) }
-            composable("send") { SendScreen(navController, viewModel) }
-            composable("receive") { ReceiveScreen(navController, viewModel) }
-            composable("history") { HistoryScreen(viewModel) }
-            composable("settings") { SettingsScreen(viewModel) }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Actionable Recovery Guidance container
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFEF4444).copy(alpha = 0.05f), RoundedCornerShape(10.dp))
+                    .border(0.5.dp, Color(0xFFEF4444).copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Build,
+                    contentDescription = "Troubleshooting instruction",
+                    tint = Color(0xFFF97316).copy(alpha = 0.8f),
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = exception.recoveryHint,
+                    color = TextSecondary,
+                    fontSize = 11.5.sp,
+                    lineHeight = 15.sp,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Action buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary),
+                    contentPadding = PaddingValues(horizontal = 12.dp)
+                ) {
+                    Text("Dismiss", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
         }
     }
 }
@@ -620,29 +785,211 @@ fun SendScreen(navController: NavController, viewModel: PeerLinkViewModel) {
 
         if (inviteCode == null && stats.progress == 0f && stats.error == null && !stats.isComplete && !stats.isConnecting && !stats.isWaitingForApproval) {
             if (selectedFiles.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(CoreDarkVariant)
-                        .border(2.dp, AuroraTeal, RoundedCornerShape(24.dp))
-                        .clickable { launcher.launch(arrayOf("*/*")) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(RoundedCornerShape(24.dp))
-                                .background(AuroraTeal.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
+                Column(modifier = Modifier.weight(1f)) {
+                    // SAF Permission-Safe Explanation Banner
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        colors = CardDefaults.cardColors(containerColor = AuroraTeal.copy(alpha = 0.05f)),
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, AuroraTeal.copy(alpha = 0.15f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null, tint = AuroraTeal, modifier = Modifier.size(36.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(AuroraTeal.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Lock, contentDescription = "Security Status", tint = AuroraTeal, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Storage Access Framework (SAF)", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("No storage permission required. Files are accessed via secure system-brokered virtual selections on demand.", color = TextSecondary, fontSize = 11.sp)
+                            }
                         }
-                        Spacer(Modifier.height(16.dp))
-                        Text("Tap to select files to send", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Text("Supports multi-selection of documents, APKs, videos", color = TextSecondary, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 24.dp))
+                    }
+
+                    // Large Comprehensive File Scanner Button Card
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1.3f)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(CoreDarkVariant)
+                            .border(2.dp, AuroraTeal, RoundedCornerShape(24.dp))
+                            .clickable { navController.navigate("file_browser") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(AuroraTeal.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Folder, contentDescription = "Add Files", tint = AuroraTeal, modifier = Modifier.size(32.dp))
+                            }
+                            Spacer(Modifier.height(14.dp))
+                            Text("Launch In-App File Explorer", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Explore local document repositories, folders, and visual media grids", color = TextSecondary, fontSize = 11.sp, textAlign = TextAlign.Center)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text("SELECT FILES VIA STORAGE FILTERS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Media Categories Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable { launcher.launch(arrayOf("image/*")) },
+                            colors = CardDefaults.cardColors(containerColor = CoreDarkVariant),
+                            shape = RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, CoreDeepSpace)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(AuroraViolet.copy(alpha = 0.12f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Image, contentDescription = "Images Filter", tint = AuroraViolet, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("Images", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("image/*", color = TextSecondary, fontSize = 10.sp)
+                            }
+                        }
+
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable { launcher.launch(arrayOf("video/*")) },
+                            colors = CardDefaults.cardColors(containerColor = CoreDarkVariant),
+                            shape = RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, CoreDeepSpace)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(AuroraCyan.copy(alpha = 0.12f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = "Videos Filter", tint = AuroraCyan, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("Videos", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("video/*", color = TextSecondary, fontSize = 10.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Audio & Documents Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable { launcher.launch(arrayOf("audio/*")) },
+                            colors = CardDefaults.cardColors(containerColor = CoreDarkVariant),
+                            shape = RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, CoreDeepSpace)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(AuroraTeal.copy(alpha = 0.12f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Folder, contentDescription = "Audio Filter", tint = AuroraTeal, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("Audio Track", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("audio/*", color = TextSecondary, fontSize = 10.sp)
+                            }
+                        }
+
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable { launcher.launch(arrayOf("application/pdf", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")) },
+                            colors = CardDefaults.cardColors(containerColor = CoreDarkVariant),
+                            shape = RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, CoreDeepSpace)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(AuroraViolet.copy(alpha = 0.12f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Description, contentDescription = "Documents Filter", tint = AuroraViolet, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("Documents", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("PDF, TXT, DOCX", color = TextSecondary, fontSize = 10.sp)
+                            }
+                        }
                     }
                 }
             } else {
@@ -659,7 +1006,21 @@ fun SendScreen(navController: NavController, viewModel: PeerLinkViewModel) {
                                 .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.InsertDriveFile, contentDescription = "Selected File", tint = AuroraViolet, modifier = Modifier.size(32.dp))
+                            val icon = when {
+                                localFile.name.endsWith(".jpg", true) || localFile.name.endsWith(".png", true) || localFile.name.endsWith(".jpeg", true) -> Icons.Default.Image
+                                localFile.name.endsWith(".mp4", true) || localFile.name.endsWith(".mkv", true) || localFile.name.endsWith(".avi", true) -> Icons.Default.PlayArrow
+                                localFile.name.endsWith(".pdf", true) || localFile.name.endsWith(".docx", true) || localFile.name.endsWith(".txt", true) -> Icons.Default.Description
+                                else -> Icons.Default.InsertDriveFile
+                            }
+                            
+                            val tint = when (icon) {
+                                Icons.Default.Image -> AuroraViolet
+                                Icons.Default.PlayArrow -> AuroraCyan
+                                Icons.Default.Description -> AuroraTeal
+                                else -> TextSecondary
+                            }
+
+                            Icon(icon, contentDescription = "Selected File", tint = tint, modifier = Modifier.size(32.dp))
                             Spacer(modifier = Modifier.width(12.dp))
 
                             Column(modifier = Modifier.weight(1f)) {
@@ -675,7 +1036,7 @@ fun SendScreen(navController: NavController, viewModel: PeerLinkViewModel) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
-                        onClick = { launcher.launch(arrayOf("*/*")) },
+                        onClick = { navController.navigate("file_browser") },
                         colors = ButtonDefaults.buttonColors(containerColor = CoreDarkVariant),
                         modifier = Modifier
                             .weight(1f)

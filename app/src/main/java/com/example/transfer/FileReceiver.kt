@@ -5,6 +5,7 @@ import android.os.Environment
 import com.example.domain.TransferStats
 import com.example.security.CryptoUtils
 import com.example.domain.model.TransferMetadata
+import com.example.util.PeerLinkException
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
@@ -77,7 +78,12 @@ class FileReceiver(private val context: Context) {
             outStream.flush()
 
             if (!approved || !peerApproved) {
-                _stats.value = _stats.value.copy(error = "Transfer rejected", isComplete = true)
+                val rejectEx = PeerLinkException.PeerRejectedException(isSelfReject = !approved)
+                _stats.value = _stats.value.copy(
+                    error = rejectEx.description,
+                    exception = rejectEx,
+                    isComplete = true
+                )
                 return@withContext
             }
             
@@ -142,7 +148,12 @@ class FileReceiver(private val context: Context) {
 
         } catch (e: Exception) {
             e.printStackTrace()
-            _stats.value = _stats.value.copy(error = e.message, isComplete = true)
+            val mapped = PeerLinkException.fromThrowable(e)
+            _stats.value = _stats.value.copy(
+                error = mapped.description,
+                exception = mapped,
+                isComplete = true
+            )
         } finally {
             socket?.close()
         }
@@ -152,5 +163,14 @@ class FileReceiver(private val context: Context) {
         try {
             socket?.close()
         } catch (e: Exception) {}
+    }
+
+    fun reportException(e: Throwable) {
+        val mapped = PeerLinkException.fromThrowable(e)
+        _stats.value = _stats.value.copy(
+            error = mapped.description,
+            exception = mapped,
+            isComplete = true
+        )
     }
 }

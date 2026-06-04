@@ -29,6 +29,13 @@ class NsdHelper(private val context: Context) {
     private val _discoveredPeers = MutableStateFlow<List<DiscoveredPeer>>(emptyList())
     val discoveredPeers: StateFlow<List<DiscoveredPeer>> = _discoveredPeers.asStateFlow()
 
+    private val _discoveryException = MutableStateFlow<com.example.util.PeerLinkException?>(null)
+    val discoveryException = _discoveryException.asStateFlow()
+
+    fun clearDiscoveryException() {
+        _discoveryException.value = null
+    }
+
     private var isDiscovering = false
     private var isRegistered = false
 
@@ -64,6 +71,7 @@ class NsdHelper(private val context: Context) {
 
             override fun onRegistrationFailed(info: NsdServiceInfo, errorCode: Int) {
                 Log.e(tag, "Service registration failed: $errorCode")
+                _discoveryException.value = com.example.util.PeerLinkException.DiscoveryException("registering service (code: $errorCode)")
                 isRegistered = false
             }
 
@@ -81,6 +89,7 @@ class NsdHelper(private val context: Context) {
             manager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
         } catch (e: Exception) {
             Log.e(tag, "Error registering NSD service", e)
+            _discoveryException.value = com.example.util.PeerLinkException.DiscoveryException("registering service", e)
         }
     }
 
@@ -113,6 +122,7 @@ class NsdHelper(private val context: Context) {
         discoveryListener = object : NsdManager.DiscoveryListener {
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
                 Log.e(tag, "Start discovery failed: $errorCode")
+                _discoveryException.value = com.example.util.PeerLinkException.DiscoveryException("starting discovery (code: $errorCode)")
                 try {
                     nsdManager?.stopServiceDiscovery(this)
                 } catch (e: Exception) {
@@ -123,6 +133,7 @@ class NsdHelper(private val context: Context) {
 
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
                 Log.e(tag, "Stop discovery failed: $errorCode")
+                _discoveryException.value = com.example.util.PeerLinkException.DiscoveryException("stopping discovery (code: $errorCode)")
                 isDiscovering = false
             }
 
@@ -203,6 +214,7 @@ class NsdHelper(private val context: Context) {
             manager.discoverServices("_peerlink._tcp", NsdManager.PROTOCOL_DNS_SD, discoveryListener)
         } catch (e: Exception) {
             Log.e(tag, "Error starting discovery", e)
+            _discoveryException.value = com.example.util.PeerLinkException.DiscoveryException("initiating discovery", e)
             isDiscovering = false
         }
     }
